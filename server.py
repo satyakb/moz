@@ -95,12 +95,11 @@ def signal_handler(signal, frame):
 
 Thread(target=spray).start()
 
-# threads = []
 while True:
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     conn, addr = sock.accept()
     print 'Connection address:', addr
     thread = Thread(target=client_thread, args=(conn,))
     thread.start()
-    # threads.append(thread)

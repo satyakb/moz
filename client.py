@@ -103,6 +103,7 @@ def cleanup():
 
 def main():
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     args = docopt(doc, version='Moz 1.0')
     try:
