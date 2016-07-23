@@ -26,7 +26,7 @@ TCP_IP = "127.0.0.1"
 TCP_PORT = 5005
 
 # length of data to send
-BUFFER = 1024
+BUFFER = 256
 
 sock = None
 p = None
@@ -54,6 +54,7 @@ def share(file, ip, port):
     while data != '':
         sock.send(data)
         data = wf.readframes(BUFFER)
+        time.sleep(0.001)
 
     cleanup()
 

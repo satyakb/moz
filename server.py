@@ -1,6 +1,10 @@
 #!/usr/bin/env python
+import base64
 import errno
+import json
 import pyaudio
+import redis
+import select
 import signal
 import socket
 import sys
@@ -13,58 +17,86 @@ from threading import Thread, Lock
 TCP_IP = "127.0.0.1"
 TCP_PORT = 5005
 
+r = redis.StrictRedis(host='localhost', port=6379, db=0)
+
 sock = socket.socket(socket.AF_INET,  # Internet
                      socket.SOCK_STREAM)  # TCP
 sock.bind((TCP_IP, TCP_PORT))
 sock.listen(5)
 
-BUFFER = 1024 * 2 * 2
+BUFFER = 256 * 2 * 2
 
 audio = {}  # {room: Queue<data>}
 listeners = {}  # {room: Set<socket>}
 lock = Lock()
 
 
-def sharer_handler(conn):
-    room = str(uuid.uuid4())
+def sharer_handler(conn, room):
     conn.sendall(room)
     while True:
         data = conn.recv(BUFFER)
         if not data:
             break
-        with lock:
-            if room not in audio:
-                audio[room] = Queue()
-                listeners[room] = set()
+        need_lock = True
+        if need_lock:
+            with lock:
+                if room not in audio:
+                    # audio[room] = Queue()
+                    listeners[room] = set()
+                need_lock = False
         audio[room].put(data)
 
+        data = json.dumps({'room': room, 'data': base64.b64encode(data)})
+        r.rpush("audio:%s" % room, data)
+        time.sleep(0.001)
 
-def listener_handler(conn):
-    room = conn.recv(1024)
+
+def listener_handler(conn, room):
     with lock:
         if room not in audio:
-            audio[room] = Queue()
+            # audio[room] = Queue()
             listeners[room] = set()
-    listeners[room].add(conn)
+        listeners[room].add(conn)
+        print listeners[room]
+
     while True:
+        try:
+            select.select([conn, ], [conn, ], [], 5)
+        except IOError:
+            break
         time.sleep(1)
 
 
-def spray():
+def spray(room):
     while True:
         with lock:
-            for room in audio:
-                if listeners[room]:
+            if room in listeners:
+                if not listeners[room]:
+                    time.sleep(0.001)
+                    continue
+                msg = r.lpop("audio:%s" % room)
+                if not msg:
+                    time.sleep(0.001)
+                    continue
+                data = json.loads(msg)
+                try:
+                    data = base64.b64decode(data['data'])
+                except Empty:
+                    continue
+                for conn in set(listeners[room]):
                     try:
-                        data = audio[room].get_nowait()
-                    except Empty:
-                        continue
-                    for conn in listeners[room]:
-                        try:
-                            conn.sendall(data)
-                        except IOError, e:
-                            if e.errno != errno.EPIPE:
-                                raise e
+                        conn.sendall(data)
+                    except IOError, e:
+                        if e.errno == errno.EPIPE:
+                            conn.close()
+                            listeners[room].remove(conn)
+
+        time.sleep(0.001)
+
+
+def create_room():
+    room = str(uuid.uuid4())
+    return 'room'
 
 
 def client_thread(conn):
@@ -72,15 +104,15 @@ def client_thread(conn):
 
     try:
         if data == '0':
-            sharer_handler(conn)
+            room = create_room()
+            Thread(target=spray, args=(room,)).start()
+            sharer_handler(conn, room)
         else:
-            listener_handler(conn)
+            room = conn.recv(1024)
+            room = 'room'
+            listener_handler(conn, room)
     finally:
-        with lock:
-            print 'here'
-            for members in listeners.values():
-                members.discard(conn)
-            conn.close()
+        conn.close()
 
 
 def cleanup():
@@ -93,7 +125,7 @@ def signal_handler(signal, frame):
     cleanup()
     sys.exit(0)
 
-Thread(target=spray).start()
+r.delete("audio")
 
 while True:
     signal.signal(signal.SIGINT, signal_handler)

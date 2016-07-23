@@ -90,3 +90,5 @@ ENV/
 
 # Wav files
 *.wav
+
+dump.rdb
