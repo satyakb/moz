@@ -26,7 +26,6 @@ sock.listen(5)
 
 BUFFER = 256 * 2 * 2
 
-audio = {}  # {room: Queue<data>}
 listeners = {}  # {room: Set<socket>}
 lock = Lock()
 
@@ -66,14 +65,13 @@ def listener_handler(conn, room):
 
 def spray(room):
     while True:
+        time.sleep(0.001)
         with lock:
             if room in listeners:
                 if not listeners[room]:
-                    time.sleep(0.001)
                     continue
                 msg = r.lpop("audio:%s" % room)
                 if not msg:
-                    time.sleep(0.001)
                     continue
                 data = json.loads(msg)
                 try:
@@ -88,12 +86,10 @@ def spray(room):
                             conn.close()
                             listeners[room].remove(conn)
 
-        time.sleep(0.001)
-
 
 def create_room():
-    room = str(uuid.uuid4())
-    return 'room'
+    room = str(uuid.uuid4())[:8]
+    return room
 
 
 def client_thread(conn):
@@ -106,7 +102,6 @@ def client_thread(conn):
             sharer_handler(conn, room)
         else:
             room = conn.recv(1024)
-            room = 'room'
             listener_handler(conn, room)
     finally:
         conn.close()
@@ -122,13 +117,21 @@ def signal_handler(signal, frame):
     cleanup()
     sys.exit(0)
 
-r.delete(*r.keys())
 
-while True:
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+def main():
+    if r.keys():
+        r.delete(*r.keys())
 
-    conn, addr = sock.accept()
-    print 'Connection address:', addr
-    thread = Thread(target=client_thread, args=(conn,))
-    thread.start()
+    while True:
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        conn, addr = sock.accept()
+        print 'Connection address:', addr
+        thread = Thread(target=client_thread, args=(conn,))
+        thread.start()
+
+
+if __name__ == '__main__':
+    main()
+
