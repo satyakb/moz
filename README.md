@@ -1,6 +1,11 @@
 # Streamer of audio (or any kind of data really)
 
 ```bash
+# Install required python stuff:
+pip install -U -r requirements.txt
+
+# Install redis: http://redis.io/download
+
 # Start redis:
 redis-server
 
