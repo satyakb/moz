@@ -40,11 +40,9 @@ def sharer_handler(conn, room):
         need_lock = True
         if need_lock:
             with lock:
-                if room not in audio:
-                    # audio[room] = Queue()
+                if room not in listeners:
                     listeners[room] = set()
                 need_lock = False
-        audio[room].put(data)
 
         data = json.dumps({'room': room, 'data': base64.b64encode(data)})
         r.rpush("audio:%s" % room, data)
@@ -53,8 +51,7 @@ def sharer_handler(conn, room):
 
 def listener_handler(conn, room):
     with lock:
-        if room not in audio:
-            # audio[room] = Queue()
+        if room not in listeners:
             listeners[room] = set()
         listeners[room].add(conn)
         print listeners[room]
@@ -125,7 +122,7 @@ def signal_handler(signal, frame):
     cleanup()
     sys.exit(0)
 
-r.delete("audio")
+r.delete(*r.keys())
 
 while True:
     signal.signal(signal.SIGINT, signal_handler)
