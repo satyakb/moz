@@ -4,6 +4,7 @@ import errno
 import redis
 import signal
 import socket
+import sys
 import time
 import uuid
 
