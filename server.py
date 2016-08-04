@@ -1,17 +1,12 @@
 #!/usr/bin/env python
 import base64
 import errno
-import json
-import pyaudio
 import redis
-import select
 import signal
 import socket
-import sys
 import time
 import uuid
 
-from Queue import Empty, Queue
 from threading import Thread, Lock
 
 TCP_IP = "127.0.0.1"
@@ -43,8 +38,7 @@ def sharer_handler(conn, room):
                     listeners[room] = set()
                 need_lock = False
 
-        data = json.dumps({'room': room, 'data': base64.b64encode(data)})
-        r.rpush("audio:%s" % room, data)
+        r.rpush("audio:%s" % room, base64.b64encode(data))
         time.sleep(0.001)
 
 
@@ -69,14 +63,10 @@ def spray(room):
                     continue
 
                 # Get data from Redis
-                msg = r.lpop("audio:%s" % room)
-                if not msg:  # if nothing to send, continue
+                data = r.lpop("audio:%s" % room)
+                if not data:  # if nothing to send, continue
                     continue
-                data = json.loads(msg)
-                try:
-                    data = base64.b64decode(data['data'])
-                except Empty:
-                    continue
+                data = base64.b64decode(data)
 
                 # Send BUFFER amount of stream to all listeners
                 # duplicate so set can be modified while iterating
@@ -84,6 +74,7 @@ def spray(room):
                     try:
                         conn.sendall(data)
                     except IOError, e:
+                        # Close connection and remove listener if socket closed
                         if e.errno == errno.EPIPE:
                             conn.close()
                             listeners[room].remove(conn)
@@ -102,8 +93,8 @@ def client_thread(conn):
             room = create_room()
             Thread(target=spray, args=(room,)).start()
             sharer_handler(conn, room)
-        else:
-            room = conn.recv(1024)
+        elif data == '1':
+            room = conn.recv(8)
             listener_handler(conn, room)
     finally:
         conn.close()
