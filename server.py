@@ -32,11 +32,11 @@ lock = Lock()
 
 def sharer_handler(conn, room):
     conn.sendall(room)
+    need_lock = True
     while True:
         data = conn.recv(BUFFER)
         if not data:
             break
-        need_lock = True
         if need_lock:
             with lock:
                 if room not in listeners:
@@ -55,29 +55,31 @@ def listener_handler(conn, room):
         listeners[room].add(conn)
         print listeners[room]
 
+    # Loop so connection doesn't end
     while True:
-        try:
-            select.select([conn, ], [conn, ], [], 5)
-        except IOError:
-            break
         time.sleep(1)
 
 
 def spray(room):
     while True:
-        time.sleep(0.001)
+        time.sleep(0.001)  # be nice to cpu
         with lock:
             if room in listeners:
-                if not listeners[room]:
+                if not listeners[room]:  # if no listeners in room, continue
                     continue
+
+                # Get data from Redis
                 msg = r.lpop("audio:%s" % room)
-                if not msg:
+                if not msg:  # if nothing to send, continue
                     continue
                 data = json.loads(msg)
                 try:
                     data = base64.b64decode(data['data'])
                 except Empty:
                     continue
+
+                # Send BUFFER amount of stream to all listeners
+                # duplicate so set can be modified while iterating
                 for conn in set(listeners[room]):
                     try:
                         conn.sendall(data)
@@ -134,4 +136,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
