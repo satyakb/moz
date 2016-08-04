@@ -89,11 +89,16 @@ def client_thread(conn):
     data = conn.recv(1)
 
     try:
-        if data == '0':
+        if data == '0':  # Sharer
             room = create_room()
+
+            # Create thread that handles sending data to all listeners
             Thread(target=spray, args=(room,)).start()
+
+            # Handle incoming data from sharer
             sharer_handler(conn, room)
-        elif data == '1':
+
+        elif data == '1':  # Listener
             room = conn.recv(8)
             listener_handler(conn, room)
     finally:
@@ -112,15 +117,17 @@ def signal_handler(signal, frame):
 
 
 def main():
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     if r.keys():
         r.delete(*r.keys())
 
     while True:
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-
         conn, addr = sock.accept()
         print 'Connection address:', addr
+
+        # Create thread to handle each connection
         thread = Thread(target=client_thread, args=(conn,))
         thread.start()
 

@@ -108,10 +108,13 @@ def main():
 
     args = docopt(doc, version='Moz 1.0')
     try:
+        ip = args.get('<ip>')
+        port = int(args.get('<port>'))
+
         if args.get('share'):
-            share(args.get('<wavfile>'), args.get('<ip>'), int(args.get('<port>')))
+            share(args.get('<wavfile>'), ip, port)
         elif args.get('listen'):
-            listen(args.get('<room>'), args.get('<ip>'), int(args.get('<port>')))
+            listen(args.get('<room>'), ip, port)
     finally:
         cleanup()
 
